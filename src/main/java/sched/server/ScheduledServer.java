@@ -53,14 +53,7 @@ public class ScheduledServer implements InitializingBean {
         logger.info("Server started on port {}", port);
 
         //Scheduled
-        ScheduledFuture<?> future = channel.eventLoop().scheduleAtFixedRate(
-        new Runnable() {
-            @Override
-            public void run() {
-                logger.info("Run every 33 seconds");
-            }
-        }, 5, 5, TimeUnit.SECONDS);
-                
+        //ScheduledFuture<?> future = channel.eventLoop().scheduleAtFixedRate(new Runnable(){i, i, TimeUnit.SECONDS});
     }
 
 }
