@@ -9,6 +9,13 @@ import java.util.concurrent.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import reactor.netty.http.client.HttpClient;
+import reactor.netty.http.client.HttpClientResponse;
+import com.google.common.net.HostAndPort;
+import com.orbitz.consul.Consul;
+import com.orbitz.consul.StatusClient;
+import com.orbitz.consul.KeyValueClient;
+
 /**
  * 处理服务端 channel.
  */
@@ -18,9 +25,27 @@ public class ScheduledServerHandler extends ChannelInboundHandlerAdapter {
 
     private volatile Channel channel;
 
-	@Override
+    private volatile Consul consul;
+
+    /*
+     * https://api.seniverse.com/v3/weather/now.json?key=w99tf57ghc86thhv&location=beijing&language=zh-Hans&unit=c
+	 */
+    @Override
 	public void channelActive(final ChannelHandlerContext ctx) {
 		logger.info("channelActive.");
+        String res = HttpClient.create()
+        .get()
+        .uri("https://api.seniverse.com/v3/weather/now.json?key=w99tf57ghc86thhv&location=beijing&language=zh-Hans&unit=c")
+        .responseContent()
+        .aggregate()
+        .asString()
+        .block();
+        logger.info("## responseContent-->{}", res);
+        
+
+        consul = Consul.builder().withHostAndPort(HostAndPort.fromString("10.100.163.16:8500")).build();
+        KeyValueClient kvClient = consul.keyValueClient();
+        kvClient.putValue("foo", "bay");
 	}
 
     /*
@@ -32,30 +57,49 @@ public class ScheduledServerHandler extends ChannelInboundHandlerAdapter {
         String str = bufIn.toString(CharsetUtil.UTF_8).replace("\n", "");
         logger.info("channelRead<<{}", str);
 
+        StatusClient statusClient = consul.statusClient();
+        logger.info("==============getLeader:{}", statusClient.getLeader());
+
+        KeyValueClient kvClient = consul.keyValueClient();
+        String value = kvClient.getValueAsString("foo").get();
+        logger.info("==============kvClient:{}", value);
+
+
         this.channel = ctx.channel();
         //Scheduled        
-        this.scheduleOnce(this.channel, 3);
-        this.scheduleInteral(this.channel, 5, 5);
+        //this.scheduleOnce(this.channel, 3);
+        //this.scheduleRate(this.channel, 5, 5);
     }
 
+    /*
+     * run->Thread.sleep();会阻塞线程
+     */
     private void scheduleOnce(Channel channel, int delay) {
         ScheduledFuture<?> future = channel.eventLoop().schedule(
             new Runnable() {
             @Override
-            public void run() {
+            public void run() {                
                 logger.info("Run later at {}", delay);
             }
         }, delay, TimeUnit.SECONDS);
     }
 
-    private void scheduleInteral(Channel channel, int delay, int interal) {
+    private void scheduleRate(Channel channel, int delay, int rate) {
         ScheduledFuture<?> future = channel.eventLoop().scheduleAtFixedRate(
             new Runnable() {
             @Override
             public void run() {
-                logger.info("Run every {} seconds", interal);
+                logger.info("Run every {} seconds", rate);
+                String res = HttpClient.create()
+                .get()
+                .uri("https://api.seniverse.com/v3/weather/now.json?key=w99tf57ghc86thhv&location=beijing&language=zh-Hans&unit=c")
+                .responseContent()
+                .aggregate()
+                .asString()
+                .block();
+                logger.info("==============responseContent->{}", res);
             }
-        }, delay, interal, TimeUnit.SECONDS);
+        }, delay, rate, TimeUnit.SECONDS);
     }
 
     @Override
